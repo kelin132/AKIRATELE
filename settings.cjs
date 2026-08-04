@@ -1,0 +1,22 @@
+module.exports = {
+  ownerName: "Kelin",
+  ownerNumber: process.env.OWNER_NUMBER || "",
+  botName: process.env.BOT_NAME || "KELIN MD",
+  prefix: process.env.PREFIX || ".",
+  themeEmoji: "⚡",
+  footer: "© KELIN MD",
+  mongoUri: process.env.MONGO_URI || "",
+  sessionFolder: "sessions",
+  premiumUsers: [],
+  adminNumbers: [],
+  autoRead: false,
+  autoReact: false,
+  antiLink: false,
+  antiSpam: true,
+  antiDelete: false,
+  welcomeMessage: true,
+  xpSystem: true,
+  apiKeys: {
+    gemini: process.env.GEMINI_API_KEY || "",
+  },
+};
