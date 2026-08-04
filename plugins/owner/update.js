@@ -1,7 +1,5 @@
-import { existsSync } from "fs";
 import { exec } from "child_process";
 import { promisify } from "util";
-import path from "path";
 
 const execAsync = promisify(exec);
 
@@ -15,49 +13,48 @@ export default {
   isOwner: true,
 
   async run({ ctx }) {
-    const rootDir = path.resolve(".");
-    const gitDir  = path.join(rootDir, ".git");
-
-    // ── Guard: git must be present ─────────────────────────────────────────
-    if (!existsSync(gitDir)) {
-      return ctx.reply(
-        `❌ *Git not available!*\n\nMake sure .git folder exists and git is installed.`,
-        { parse_mode: "Markdown" },
-      );
-    }
-
-    const statusMsg = await ctx.reply("⏳ *Pulling latest changes…*", { parse_mode: "Markdown" });
+    await ctx.reply("⏳ *Pulling latest changes…*", { parse_mode: "Markdown" });
 
     try {
-      const { stdout, stderr } = await execAsync("git pull", { cwd: rootDir, timeout: 30_000 });
+      // Let git find its own repo root — works regardless of cwd
+      const { stdout: repoRoot } = await execAsync("git rev-parse --show-toplevel", { timeout: 10_000 });
+      const cwd = repoRoot.trim();
+
+      const { stdout, stderr } = await execAsync("git pull", { cwd, timeout: 30_000 });
       const output = (stdout || stderr || "").trim();
 
-      // ── Already up to date ───────────────────────────────────────────────
+      // ── Already up to date ─────────────────────────────────────────────────
       if (output.toLowerCase().includes("already up to date")) {
         return ctx.reply("✅ *Already up to date!* No new changes.", { parse_mode: "Markdown" });
       }
 
-      // ── Changes pulled ───────────────────────────────────────────────────
-      // Extract the changed-file summary (lines like "  plugins/cards/si.js | 5 ++---")
-      const lines  = output.split("\n");
+      // ── Changes pulled — show file summary ────────────────────────────────
+      const lines   = output.split("\n");
       const summary = lines
         .filter((l) => l.includes("|") || l.match(/\d+ file/))
         .join("\n")
         .trim();
 
-      const reply =
+      const replyText =
         `✅ *Bot updated successfully!*\n\n` +
-        (summary
-          ? `\`\`\`\n${summary.slice(0, 800)}\n\`\`\`\n\n`
-          : `\`\`\`\n${output.slice(0, 800)}\n\`\`\`\n\n`) +
+        `\`\`\`\n${(summary || output).slice(0, 800)}\n\`\`\`\n\n` +
         `♻️ _Restart the bot to apply changes._`;
 
-      return ctx.reply(reply, { parse_mode: "Markdown" });
+      return ctx.reply(replyText, { parse_mode: "Markdown" });
 
     } catch (err) {
-      const msg = (err.stderr || err.stdout || err.message || "Unknown error").trim();
+      const raw = (err.stderr || err.stdout || err.message || "Unknown error").trim();
+
+      // Friendly message when git itself isn't available or no repo found
+      if (raw.includes("not a git repository") || raw.includes("not found") || raw.includes("No such file")) {
+        return ctx.reply(
+          `❌ *Git not available!*\n\nMake sure the bot is deployed as a git clone and git is installed on the server.`,
+          { parse_mode: "Markdown" },
+        );
+      }
+
       return ctx.reply(
-        `❌ *Git pull failed!*\n\n\`\`\`\n${msg.slice(0, 800)}\n\`\`\``,
+        `❌ *Git pull failed!*\n\n\`\`\`\n${raw.slice(0, 800)}\n\`\`\``,
         { parse_mode: "Markdown" },
       );
     }
