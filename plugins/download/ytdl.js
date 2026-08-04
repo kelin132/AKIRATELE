@@ -1,11 +1,9 @@
 /**
- * KELIN MD — .ytdl command
- * Downloads YouTube videos using GiftedTech API with David Cyril fallback.
+ * AKIRA Telegram — .ytdl command
+ * Downloads YouTube videos (MP4).
  */
 import yts from "yt-search";
 import { get, davidGet } from "../../lib/gifted.js";
-
-// ── Search YouTube ────────────────────────────────────────────────────────────
 
 async function ytSearch(input) {
   if (/youtube\.com|youtu\.be/i.test(input)) {
@@ -23,20 +21,10 @@ async function ytSearch(input) {
   };
 }
 
-// ── Extract video download URL ────────────────────────────────────────────────
-
 function pickVideo(result) {
   if (!result) return null;
-  return (
-    result.download_url ||
-    result.video_url    ||
-    result.video        ||
-    result.hd           ||
-    result.sd           ||
-    result.url          ||
-    result.link         ||
-    null
-  );
+  return result.download_url || result.video_url || result.video ||
+         result.hd || result.sd || result.url || result.link || null;
 }
 
 async function fetchVideo(videoUrl) {
@@ -48,7 +36,6 @@ async function fetchVideo(videoUrl) {
     () => davidGet("/download/youtube", { url: videoUrl, type: "video" }),
     () => davidGet("/download/yt",      { url: videoUrl }),
   ];
-
   for (const attempt of endpoints) {
     try {
       const data   = await attempt();
@@ -57,74 +44,53 @@ async function fetchVideo(videoUrl) {
       if (dl) return { dl, title: result?.title || "" };
     } catch { /* try next */ }
   }
-
-  throw new Error("All YouTube video download sources failed. Try a direct YouTube URL or use *.play* for audio.");
+  throw new Error("All video download sources failed. Try a direct YouTube URL or use .play for audio.");
 }
 
-// ── .ytdl ─────────────────────────────────────────────────────────────────────
-
 export default {
-  name: "yt",
+  name: "ytdl",
   description: "Download YouTube videos (MP4)",
   category: "download",
   usage: ".ytdl <YouTube URL or search query>",
   aliases: ["yt", "youtube", "video"],
   cooldown: 30,
-  isOwner: false,
-  isAdmin: false,
-  isPremium: false,
 
-  async run({ sock, msg, text }) {
-    const jid = msg.key.remoteJid;
-
+  async run({ ctx, args }) {
+    const text = args.join(" ").trim();
     if (!text) {
-      return sock.sendMessage(jid, {
-        text: "🎬 *YouTube Video Downloader*\n\nUsage:\n*.ytdl <YouTube URL or search query>*\n\nExample:\n.ytdl https://youtu.be/xxxxx\n.ytdl Naruto opening 1\n\n💡 For audio only, use *.play*",
-      }, { quoted: msg });
+      return ctx.reply(
+        "🎬 <b>YouTube Video Downloader</b>\n\n" +
+        "Usage: <code>.ytdl &lt;YouTube URL or search&gt;</code>\n\n" +
+        "Example:\n.ytdl https://youtu.be/xxxxx\n.ytdl Naruto opening 1\n\n" +
+        "💡 For audio only, use .play",
+        { parse_mode: "HTML" }
+      );
     }
 
     try {
-      await sock.sendMessage(jid, { text: "🔍 Searching YouTube..." }, { quoted: msg });
-
+      await ctx.reply("🔍 Searching YouTube...");
       const meta = await ytSearch(text);
 
-      // Send preview while fetching
-      const previewCaption = [
-        `🎬 *${meta.title}*`,
-        meta.author   ? `👤 ${meta.author}`   : "",
-        meta.duration ? `⏱️ ${meta.duration}` : "",
-        "",
-        "⬇️ _Downloading video… please wait_",
-      ].filter(Boolean).join("\n");
+      const previewCaption =
+        `🎬 <b>${meta.title}</b>\n` +
+        (meta.author   ? `👤 ${meta.author}\n`   : "") +
+        (meta.duration ? `⏱️ ${meta.duration}\n` : "") +
+        "\n⬇️ <i>Downloading video… please wait</i>";
 
       if (meta.thumbnail) {
-        try {
-          await sock.sendMessage(jid, {
-            image:   { url: meta.thumbnail },
-            caption: previewCaption,
-          }, { quoted: msg });
-        } catch {
-          await sock.sendMessage(jid, { text: previewCaption }, { quoted: msg });
-        }
+        try { await ctx.replyWithPhoto(meta.thumbnail, { caption: previewCaption, parse_mode: "HTML" }); }
+        catch { await ctx.reply(previewCaption, { parse_mode: "HTML" }); }
       } else {
-        await sock.sendMessage(jid, { text: previewCaption }, { quoted: msg });
+        await ctx.reply(previewCaption, { parse_mode: "HTML" });
       }
 
       const { dl, title } = await fetchVideo(meta.url);
       const trackTitle    = title || meta.title;
 
-      await sock.sendMessage(jid, {
-        video:    { url: dl },
-        mimetype: "video/mp4",
-        fileName: `${trackTitle}.mp4`,
-        caption:  `🎬 *${trackTitle}*\n\n✨ *KELIN MD*`,
-      }, { quoted: msg });
+      await ctx.replyWithVideo(dl, { caption: `🎬 <b>${trackTitle}</b>\n\n✨ AKIRA`, parse_mode: "HTML" });
 
     } catch (err) {
-      console.error("[ytdl]", err.message);
-      await sock.sendMessage(jid, {
-        text: `❌ YouTube download failed.\n\n_${err.message}_\n\nTip: Try a direct YouTube link, or use *.play* for audio.`,
-      }, { quoted: msg });
+      await ctx.reply(`❌ YouTube download failed.\n\n${err.message}\n\nTip: Try a direct YouTube link, or use .play for audio.`);
     }
   },
 };

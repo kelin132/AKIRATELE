@@ -1,12 +1,9 @@
 /**
- * KELIN MD — .play command
+ * AKIRA Telegram — .play command
  * Searches YouTube and downloads audio.
- * Tries multiple API endpoints with automatic fallback.
  */
 import yts from "yt-search";
 import { get, davidGet } from "../../lib/gifted.js";
-
-// ── YouTube search ────────────────────────────────────────────────────────────
 
 async function ytSearch(input) {
   if (/youtube\.com|youtu\.be/i.test(input)) {
@@ -25,54 +22,20 @@ async function ytSearch(input) {
   };
 }
 
-// ── Extract a download link from any API response shape ──────────────────────
-
 function pickAudio(result) {
   if (!result) return null;
-  return (
-    result.download_url ||
-    result.audio_url    ||
-    result.audio        ||
-    result.mp3          ||
-    result.url          ||
-    result.link         ||
-    null
-  );
+  return result.download_url || result.audio_url || result.audio ||
+         result.mp3 || result.url || result.link || null;
 }
-
-// ── Send the track thumbnail / banner ─────────────────────────────────────────
-
-async function sendBanner(sock, jid, msg, meta, action) {
-  const caption = [
-    `🎵 *${meta.title}*`,
-    meta.author   ? `👤 ${meta.author}`       : "",
-    meta.duration ? `⏱️ ${meta.duration}`     : "",
-    meta.views    ? `👁️ ${meta.views} views`  : "",
-    "",
-    `⬇️ _${action}_`,
-  ].filter(Boolean).join("\n");
-
-  if (meta.thumbnail) {
-    try {
-      return await sock.sendMessage(jid, { image: { url: meta.thumbnail }, caption }, { quoted: msg });
-    } catch { /* fall through to text */ }
-  }
-  return sock.sendMessage(jid, { text: caption }, { quoted: msg });
-}
-
-// ── Try downloading via multiple endpoints ────────────────────────────────────
 
 async function fetchAudio(videoUrl) {
   const endpoints = [
-    // Gifted API — primary endpoints
     () => get("/download/ytmp3",   { url: videoUrl }),
     () => get("/download/ytaudio", { url: videoUrl }),
     () => get("/download/youtube", { url: videoUrl, type: "audio" }),
-    // David Cyril API — fallback
     () => davidGet("/download/ytmp3",   { url: videoUrl }),
     () => davidGet("/download/ytaudio", { url: videoUrl }),
   ];
-
   for (const attempt of endpoints) {
     try {
       const data   = await attempt();
@@ -81,48 +44,47 @@ async function fetchAudio(videoUrl) {
       if (dl) return { dl, title: result?.title || "" };
     } catch { /* try next */ }
   }
-
   throw new Error("All audio download sources failed. Try a direct YouTube URL.");
 }
 
-// ── .play ─────────────────────────────────────────────────────────────────────
-
 export default {
   name: "play",
-  description: "Search and download audio from YouTube (128 kbps)",
+  description: "Search and download audio from YouTube",
   category: "download",
   usage: ".play <song name or YouTube URL>",
   aliases: ["song", "music", "mp3", "ytmp3"],
   cooldown: 15,
 
-  async run({ sock, msg, text }) {
-    const jid = msg.key.remoteJid;
-
-    if (!text) {
-      return sock.sendMessage(jid, {
-        text: "🎵 Usage: *.play <song name or YouTube URL>*\n\nExample: .play Shape of You"
-      }, { quoted: msg });
-    }
+  async run({ ctx, args }) {
+    const text = args.join(" ").trim();
+    if (!text) return ctx.reply("🎵 Usage: .play <song name or YouTube URL>\n\nExample: .play Shape of You");
 
     try {
       const meta = await ytSearch(text);
-      await sendBanner(sock, jid, msg, meta, "Fetching audio… please wait");
+
+      const caption = [
+        `🎵 <b>${meta.title}</b>`,
+        meta.author   ? `👤 ${meta.author}`      : "",
+        meta.duration ? `⏱️ ${meta.duration}`    : "",
+        meta.views    ? `👁️ ${meta.views} views` : "",
+        "",
+        "⬇️ <i>Fetching audio… please wait</i>",
+      ].filter(Boolean).join("\n");
+
+      if (meta.thumbnail) {
+        try { await ctx.replyWithPhoto(meta.thumbnail, { caption, parse_mode: "HTML" }); }
+        catch { await ctx.reply(caption, { parse_mode: "HTML" }); }
+      } else {
+        await ctx.reply(caption, { parse_mode: "HTML" });
+      }
 
       const { dl, title } = await fetchAudio(meta.url);
       const trackTitle    = title || meta.title;
 
-      await sock.sendMessage(jid, {
-        audio:    { url: dl },
-        mimetype: "audio/mpeg",
-        fileName: `${trackTitle}.mp3`,
-        ptt:      false,
-      }, { quoted: msg });
+      await ctx.replyWithAudio(dl, { title: trackTitle, performer: "AKIRA" });
 
     } catch (err) {
-      console.error("[play]", err.message);
-      await sock.sendMessage(jid, {
-        text: `❌ Audio download failed.\n\n_${err.message}_\n\nTry again or use a direct YouTube URL.`
-      }, { quoted: msg });
+      await ctx.reply(`❌ Audio download failed.\n\n${err.message}\n\nTry again or use a direct YouTube URL.`);
     }
   },
 };

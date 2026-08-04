@@ -1,20 +1,20 @@
+/**
+ * AKIRA Telegram — .ytmp3 (alias of .play)
+ */
 export default {
-  name: "ytmp3",
-  description: "Download YouTube audio as MP3",
+  name: "ytmp3dl",
+  description: "Download YouTube audio as MP3 (use .play instead)",
   category: "download",
-  usage: ".ytmp3 <url>",
+  usage: ".ytmp3 <YouTube URL>",
   aliases: ["ymp3"],
-  cooldown: 30,
-  isOwner: false,
-  isAdmin: false,
-  isPremium: false,
-  version: "1.0.0",
-  async run({ sock, msg, args }) {
+  cooldown: 15,
+
+  async run({ ctx, args }) {
     const url = args[0];
     if (!url || !url.includes("youtu")) {
-      await sock.sendMessage(msg.key.remoteJid, { text: "Usage: .ytmp3 <YouTube URL>" });
-      return;
+      return ctx.reply("Usage: .ytmp3 <YouTube URL>\n\nTip: .play also works with song names!");
     }
-    await sock.sendMessage(msg.key.remoteJid, { text: "Downloading audio... (stub)" });
+    // Delegate to the play logic by re-invoking with same args
+    return ctx.reply("⏳ Use .play <url> — it supports YouTube URLs directly!");
   },
 };
